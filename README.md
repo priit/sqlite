@@ -207,3 +207,10 @@ and iyi-db's shared driver specs (`sqlite/driver_specs_test.iyi`). They write
 crystal-sqlite3 is the work of [Brian J. Cardiff](https://github.com/bcardiff)
 and its [contributors](https://github.com/crystal-lang/crystal-sqlite3/graphs/contributors);
 this port keeps its licence (LICENSE).
+
+## Actual transaction state
+
+SQLite3Connection#transaction_state reads sqlite3_get_autocommit: Idle or InTransaction. SQLite
+does not expose a separate failed transaction state. Statements reject empty SQL and trailing SQL
+before execution. Every execution clears cached bindings and requires exactly the parameter count
+reported by SQLite; missing parameters return DBError rather than NULL or a previous value.

@@ -19,7 +19,7 @@ import std/regex::{Regex}
 import db/db/db
 import db/db/errors::*
 import db/db/value::{DBValue, ExecResult}
-import db/db/core::{Driver, ConnectionBuilder, ResultSet, Statement, Connection}
+import db/db/core::{Driver, ConnectionBuilder, ResultSet, Statement, Connection, TransactionState}
 import sqlite/errors::{SQLite3Error}
 import sqlite/dates::{format_time, parse_time}
 
@@ -153,6 +153,9 @@ lib LibSQLite3
   fun backup_step = sqlite3_backup_step(SQLite3Backup, Int32) : Int32
   fun backup_finish = sqlite3_backup_finish(SQLite3Backup) : Int32
 
+  fun get_autocommit = sqlite3_get_autocommit(SQLite3) : Int32
+  fun clear_bindings = sqlite3_clear_bindings(Statement) : Int32
+  fun bind_parameter_count = sqlite3_bind_parameter_count(Statement) : Int32
   fun prepare_v2 = sqlite3_prepare_v2(db : SQLite3, zSql : UInt8*, nByte : Int32, ppStmt : Statement*, pzTail : UInt8**) : Int32
   fun exec = sqlite3_exec(db : SQLite3, zSql : UInt8*, pCallback : Void*, pCallbackArgs : Void*, pzErrMsg : UInt8**) : Int32
   fun step = sqlite3_step(stmt : Statement) : Int32
@@ -457,8 +460,16 @@ pub class SQLite3Statement < Statement
   # Compiles *command* on *connection*: the statement, or SQLite's error.
   def self.prepare(connection : SQLite3Connection, command : String) : SQLite3Statement | DBError
     stmt = uninitialized LibSQLite3::Statement
-    code = LibSQLite3.prepare_v2(connection.to_unsafe, command.to_unsafe, command.bytesize, pointerof(stmt), nil)
+    tail = uninitialized UInt8*
+    code = LibSQLite3.prepare_v2(connection.to_unsafe, command.to_unsafe, command.bytesize,
+      pointerof(stmt), pointerof(tail))
     return connection.last_error unless code == Code::OKAY.value
+    return DBError.new("Empty SQL statement") if stmt.address == 0_u64
+    consumed = (tail.address - command.to_unsafe.address).to_i32
+    if consumed < command.bytesize && !string_from(tail, command.bytesize - consumed).strip.empty?
+      LibSQLite3.finalize(stmt)
+      return DBError.new("Trailing SQL after first statement")
+    end
     SQLite3Statement.new(connection, command, stmt)
   end
 
@@ -492,6 +503,10 @@ pub class SQLite3Statement < Statement
   end
 
   private def bind_args(args : Array(DBValue)) : Nil | DBError
+    code = LibSQLite3.clear_bindings(@stmt)
+    return sqlite3_connection.last_error unless code == Code::OKAY.value
+    expected = LibSQLite3.bind_parameter_count(@stmt)
+    return DBError.new("Expected #{expected} bound arguments, got #{args.size}") unless args.size == expected
     args.each_with_index do |arg, index|
       bound = bind_arg(index + 1, arg)
       return bound if bound.is_a?(DBError)
@@ -652,6 +667,10 @@ pub class SQLite3Connection < Connection
   end
 
   # :inherit:
+  def transaction_state : TransactionState
+    LibSQLite3.get_autocommit(@db) != 0 ? TransactionState::Idle : TransactionState::InTransaction
+  end
+
   def driver_name : String
     "sqlite3"
   end

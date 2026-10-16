@@ -2,7 +2,8 @@
 module sqlite/connection_test
 
 import db/db/db
-import db/db/core::{Database}
+import db/db/core::{Database, TransactionState}
+import db/db/errors::{DBError}
 import db/db/value::{DBValue}
 import db/db/spec::{describe, it}
 import sqlite/core::{SQLite3Connection}
@@ -131,4 +132,31 @@ describe "Connection" do
 
   # change wal_autocheckpoint (default is 1000)
   it_sets_pragma_on_connection "wal_autocheckpoint", "0", 0_i64
+end
+
+with_mem_db do |db|
+  db.using_connection do |conn|
+    assert conn.transaction_state == TransactionState::Idle
+    conn.exec("/* raw */ BEGIN").or_panic
+    assert conn.transaction_state == TransactionState::InTransaction
+    conn.exec("SAVEPOINT nested").or_panic
+    conn.exec("ROLLBACK TO nested").or_panic
+    assert conn.transaction_state == TransactionState::InTransaction
+    conn.exec("COMMIT").or_panic
+    assert conn.transaction_state == TransactionState::Idle
+    conn.exec("BEGIN").or_panic
+    conn.exec("ROLLBACK").or_panic
+    assert conn.transaction_state == TransactionState::Idle
+    assert conn.exec("CREATE TABLE rejected (id); SELECT 2").is_a?(DBError)
+    assert conn.scalar("SELECT count(*) FROM sqlite_master WHERE name = 'rejected'").or_panic == 0_i64
+    assert conn.exec("").is_a?(DBError)
+    assert conn.exec("  -- empty").is_a?(DBError)
+    assert conn.scalar("SELECT ?", args: [] of DBValue).is_a?(DBError)
+    assert conn.scalar("SELECT ?", 1, 2).is_a?(DBError)
+    assert conn.scalar("SELECT ?", 17).or_panic == 17_i64
+    assert conn.scalar("SELECT ?", args: [] of DBValue).is_a?(DBError)
+    assert conn.scalar("SELECT ?", nil).or_panic.nil?
+    assert conn.scalar("SELECT ?", 23).or_panic == 23_i64
+    nil
+  end.or_panic
 end

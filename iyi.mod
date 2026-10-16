@@ -2,3 +2,5 @@
 module github.com/iyilang/sqlite
 
 require github.com/iyilang/db v0.1.1 as db
+
+replace github.com/iyilang/db => ../db

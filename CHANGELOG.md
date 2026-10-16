@@ -1,3 +1,10 @@
+# Unreleased
+
+SQLite3Connection#transaction_state reads sqlite3_get_autocommit: Idle or InTransaction. SQLite
+does not expose a separate failed transaction state. Statements reject empty SQL and trailing SQL
+before execution. Every execution clears cached bindings and requires exactly the parameter count
+reported by SQLite; missing parameters return DBError rather than NULL or a previous value.
+
 ## v0.1.0
 
 The first release of iyi-sqlite: crystal-sqlite3 0.24.0 ported to iyi, in
