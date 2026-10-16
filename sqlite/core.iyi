@@ -480,6 +480,9 @@ pub class SQLite3Statement < Statement
   end
 
   protected def perform_exec(args : Array(DBValue)) : ExecResult | DBError
+    # A failed step can retain SQLite locks until reset, even after ROLLBACK.
+    # Cached statements must release them before this execution returns.
+    defer LibSQLite3.reset(@stmt)
     LibSQLite3.reset(@stmt)
     bind_args(args)!
 

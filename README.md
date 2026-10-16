@@ -214,3 +214,6 @@ SQLite3Connection#transaction_state reads sqlite3_get_autocommit: Idle or InTran
 does not expose a separate failed transaction state. Statements reject empty SQL and trailing SQL
 before execution. Every execution clears cached bindings and requires exactly the parameter count
 reported by SQLite; missing parameters return DBError rather than NULL or a previous value.
+
+Cached exec statements are reset before returning, including failed COMMIT, so subsequent rollback
+and schema changes can release and acquire their normal locks.

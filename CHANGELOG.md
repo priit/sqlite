@@ -1,5 +1,7 @@
 # Unreleased
 
+Reset cached exec statements on success and failure so failed COMMIT cannot retain table locks.
+
 SQLite3Connection#transaction_state reads sqlite3_get_autocommit: Idle or InTransaction. SQLite
 does not expose a separate failed transaction state. Statements reject empty SQL and trailing SQL
 before execution. Every execution clears cached bindings and requires exactly the parameter count

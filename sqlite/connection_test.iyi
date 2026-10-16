@@ -160,3 +160,20 @@ with_mem_db do |db|
     nil
   end.or_panic
 end
+
+with_mem_db do |db|
+  db.using_connection do |conn|
+    conn.exec("PRAGMA foreign_keys = ON").or_panic
+    conn.exec("CREATE TABLE deferred_owners (id INTEGER PRIMARY KEY)").or_panic
+    conn.exec("CREATE TABLE deferred_children (owner_id INTEGER REFERENCES deferred_owners (id) DEFERRABLE INITIALLY DEFERRED)").or_panic
+    conn.exec("BEGIN").or_panic
+    conn.exec("INSERT INTO deferred_children VALUES (42)").or_panic
+    assert conn.exec("COMMIT").is_a?(DBError)
+    assert conn.transaction_state == TransactionState::InTransaction
+    conn.exec("ROLLBACK").or_panic
+    assert conn.transaction_state == TransactionState::Idle
+    conn.exec("DROP TABLE deferred_children").or_panic
+    conn.exec("DROP TABLE deferred_owners").or_panic
+    nil
+  end.or_panic
+end
